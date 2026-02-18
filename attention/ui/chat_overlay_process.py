@@ -29,7 +29,6 @@
 """
 import json
 import math
-import os
 import platform
 import signal
 import sys
@@ -107,6 +106,10 @@ def run_tkinter():
         log(f"tk.Tk() 失败: {e}")
         run_headless()
         return
+
+    # macOS: 在 tk.Tk() 成功之后设置 NSApplication 属性
+    # 这样 Tk 的 Cocoa 初始化不会被干扰
+    _post_tk_macos_init()
 
     root.title("Attention OS")
     root.overrideredirect(True)
@@ -595,11 +598,14 @@ def run_headless():
 # 入口
 # ============================================================
 
-def _init_macos_app():
+def _post_tk_macos_init():
     """
-    macOS 关键初始化：将子进程注册为 GUI 应用。
-    不调用此方法的话，tkinter 窗口在 macOS 子进程中不可见。
-    （参考 pomodoro_overlay_process.py 的 run_macos_pyobjc 实现）
+    在 tk.Tk() 成功创建之后，再设置 macOS NSApplication 属性。
+    
+    关键：必须在 tk.Tk() 之后调用！
+    Tk 在初始化时会创建自己的 NSApplication 并设置 Cocoa 颜色子系统。
+    如果在 tk.Tk() 之前调用 NSApplication.sharedApplication()，会干扰
+    Tk 的 Cocoa 初始化，导致 GetRGBA → TkpGetColor 崩溃 (NSException → SIGABRT)。
     """
     if SYSTEM != "Darwin":
         return
@@ -609,37 +615,31 @@ def _init_macos_app():
         # ActivationPolicy 1 = NSApplicationActivationPolicyAccessory
         # 窗口可见，但不在 Dock 显示图标
         app.setActivationPolicy_(1)
-        log("macOS NSApplication 初始化成功 (ActivationPolicy=Accessory)")
+        log("macOS NSApplication ActivationPolicy 设置成功 (Accessory)")
     except ImportError:
         log("PyObjC (AppKit) 不可用，tkinter 窗口在 macOS 上可能不可见")
     except Exception as e:
-        log(f"macOS NSApplication 初始化失败: {e}")
+        log(f"macOS NSApplication 设置失败: {e}")
 
 
 def main():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    log(f"对话悬浮窗子进程启动 (platform={SYSTEM})")
+    # 清除父进程传递的 tkinter 禁用标记（该标记仅用于保护父进程主线程）
+    import os
+    os.environ.pop("ATTENTION_OS_NO_TKINTER", None)
 
-    force_headless = os.environ.get("ATTENTION_OS_CHAT_OVERLAY_FORCE_HEADLESS") == "1"
+    # 支持 --headless 参数（父进程检测到连续崩溃后传入）
+    force_headless = "--headless" in sys.argv
+
+    log(f"对话悬浮窗子进程启动 (platform={SYSTEM}, force_headless={force_headless})")
+
     if force_headless:
-        log("检测到 ATTENTION_OS_CHAT_OVERLAY_FORCE_HEADLESS=1，使用 headless 模式")
         run_headless()
-        return
-
-    # macOS 保护：父进程可显式禁用 tkinter（例如已知 Tk 崩溃环境）
-    # 允许通过 ATTENTION_OS_CHAT_OVERLAY_ALLOW_TKINTER=1 手动覆盖。
-    no_tkinter = os.environ.get("ATTENTION_OS_NO_TKINTER") == "1"
-    allow_tkinter = os.environ.get("ATTENTION_OS_CHAT_OVERLAY_ALLOW_TKINTER") == "1"
-    if SYSTEM == "Darwin" and no_tkinter and not allow_tkinter:
-        log("检测到 ATTENTION_OS_NO_TKINTER=1，跳过 tkinter，使用 headless 模式")
-        run_headless()
-        return
-
-    # macOS: 必须先初始化 NSApplication，否则 tkinter 窗口不可见
-    _init_macos_app()
-
-    run_tkinter()
+    else:
+        # 注意：不要在 tk.Tk() 之前调用 NSApplication.sharedApplication()！
+        # macOS NSApplication 属性在 run_tkinter 内部、tk.Tk() 成功后设置
+        run_tkinter()
 
 
 if __name__ == "__main__":
