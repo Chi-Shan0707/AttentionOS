@@ -208,6 +208,10 @@ class ChatOverlay:
                 self._ready.clear()
                 self._stderr_tail.clear()
                 child_env = os.environ.copy()
+                # macOS: 主进程为了避免 pystray/tk 冲突会设置 ATTENTION_OS_NO_TKINTER=1。
+                # 但 chat overlay 运行在独立子进程，必须允许 tkinter 才能显示窗口。
+                if platform.system() == "Darwin":
+                    child_env["ATTENTION_OS_CHAT_OVERLAY_ALLOW_TKINTER"] = "1"
                 if self._force_headless:
                     child_env["ATTENTION_OS_CHAT_OVERLAY_FORCE_HEADLESS"] = "1"
                 else:
