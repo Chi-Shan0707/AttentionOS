@@ -1084,7 +1084,12 @@ async def set_provider_key(provider: str, request: Request):
         return {"success": False, "error": "API key 不能为空"}
     mgr = get_api_settings()
     ok = mgr.set_api_key(provider, api_key)
-    return {"success": ok}
+    if not ok:
+        return {"success": False, "error": "提供商不存在或保存失败"}
+    return {
+        "success": True,
+        "message": f"{provider} 的 API key 已保存，可点击测试验证连通性。"
+    }
 
 
 @app.post("/api/settings/providers/{provider}/test")

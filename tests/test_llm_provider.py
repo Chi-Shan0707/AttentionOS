@@ -12,14 +12,10 @@
 """
 
 import json
-import os
 import pytest
 import tempfile
 from unittest.mock import patch, MagicMock, PropertyMock
 from pathlib import Path
-
-# 在导入模块前设置环境变量，避免初始化依赖
-os.environ.setdefault("MODELSCOPE_ACCESS_TOKEN", "test-token-12345")
 
 from attention.core.llm_provider import (
     MultiLLMClient, LLMProvider, ProviderConfig, DEFAULT_CONFIGS, get_llm_provider,
@@ -89,12 +85,12 @@ class TestMultiLLMClient:
     def setup_method(self):
         self.client = MultiLLMClient()
 
-    def test_init_loads_modelscope_from_env(self):
-        """初始化时应从环境变量加载 ModelScope token"""
+    def test_init_keeps_modelscope_key_empty_by_default(self):
+        """初始化时不再从环境变量读取 key，应由网页配置驱动"""
         cfg = self.client.get_config(LLMProvider.MODELSCOPE)
         assert cfg is not None
-        assert cfg.api_key == "test-token-12345"
-        assert cfg.enabled is True
+        assert cfg.api_key == ""
+        assert cfg.enabled is False
 
     def test_get_all_configs(self):
         """获取所有配置应返回 5 个提供商"""
@@ -155,6 +151,7 @@ class TestMultiLLMClientChat:
 
     def setup_method(self):
         self.client = MultiLLMClient()
+        self.client.set_api_key(LLMProvider.MODELSCOPE, "test-token-12345")
 
     def test_chat_without_api_key_raises(self):
         """没有 API key 时 chat 应抛异常"""
@@ -274,6 +271,7 @@ class TestMultiLLMClientVision:
 
     def setup_method(self):
         self.client = MultiLLMClient()
+        self.client.set_api_key(LLMProvider.MODELSCOPE, "test-token-12345")
 
     def test_vision_without_model_raises(self):
         """提供商无视觉模型时应抛异常"""

@@ -121,13 +121,6 @@ class MultiLLMClient:
         for key, cfg in DEFAULT_CONFIGS.items():
             self._configs[key] = ProviderConfig(**asdict(cfg))
 
-        # 从环境变量兼容旧配置
-        import os
-        ms_key = os.getenv("MODELSCOPE_ACCESS_TOKEN", "")
-        if ms_key:
-            self._configs[LLMProvider.MODELSCOPE].api_key = ms_key
-            self._configs[LLMProvider.MODELSCOPE].enabled = True
-
     # ---------------------------------------------------------------- #
     #  配置管理
     # ---------------------------------------------------------------- #
