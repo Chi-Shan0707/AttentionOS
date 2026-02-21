@@ -1402,13 +1402,22 @@
             resultEl.style.display = 'none';
 
             try {
-                // If new key entered, save it first
+                // If new key entered, save it first and give explicit feedback
                 if (apiKey) {
-                    await fetch(`/api/settings/providers/${provider}/key`, {
+                    const saveRes = await fetch(`/api/settings/providers/${provider}/key`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({api_key: apiKey})
                     });
+                    const saveData = await saveRes.json();
+                    if (!saveData.success) {
+                        resultEl.className = 'api-test-result fail';
+                        throw new Error('保存 API Key 失败：' + (saveData.error || '未知错误'));
+
+                    }
+                    resultEl.className = 'api-test-result success';
+                    resultEl.style.display = 'block';
+                    resultEl.textContent = '✅ ' + (saveData.message || 'API Key 已保存，正在测试连通性...');
                 }
 
                 const res = await fetch(`/api/settings/providers/${provider}/test`, {
@@ -1427,7 +1436,7 @@
                 }
             } catch(e) {
                 resultEl.className = 'api-test-result fail';
-                resultEl.textContent = '❌ 网络错误: ' + e.message;
+                resultEl.textContent = '❌ 操作失败: ' + e.message;
             }
 
             btn.classList.remove('testing');
