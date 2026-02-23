@@ -900,6 +900,44 @@ async def chat_export():
                             content={"error": str(e)})
 
 
+# ==================== 对话日志查阅 API ====================
+
+@app.get("/api/chatlog/list")
+@_safe_route
+async def list_chat_logs():
+    """列出所有对话日志文件（按日期倒序）"""
+    chat_log_dir = Config.DATA_DIR / "chat_logs"
+    if not chat_log_dir.exists():
+        return {"dates": []}
+
+    dates = []
+    for f in sorted(chat_log_dir.glob("chat_log_*.md"), reverse=True):
+        # Extract date from filename: chat_log_YYYY-MM-DD.md
+        name = f.stem  # chat_log_YYYY-MM-DD
+        if name.startswith("chat_log_"):
+            date_str = name[len("chat_log_"):]
+            dates.append(date_str)
+
+    return {"dates": dates}
+
+
+@app.get("/api/chatlog/read/{date_str}")
+@_safe_route
+async def read_chat_log(date_str: str):
+    """读取指定日期的对话日志内容"""
+    chat_log_dir = Config.DATA_DIR / "chat_logs"
+    filepath = chat_log_dir / f"chat_log_{date_str}.md"
+
+    if not filepath.exists():
+        return {"success": False, "error": f"{date_str} 暂无对话记录"}
+
+    try:
+        content = filepath.read_text(encoding="utf-8")
+        return {"success": True, "date": date_str, "content": content}
+    except Exception as e:
+        return {"success": False, "error": f"读取失败: {e}"}
+
+
 # ==================== v5.2: 目标管理 API ====================
 
 @app.get("/api/goals")

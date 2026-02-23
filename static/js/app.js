@@ -75,8 +75,7 @@
             if (el) el.classList.add('active');
             if (name === 'dashboard') { ensureChartsInit(); loadData(); loadWorkStartData(); }
             if (name === 'todo') loadTodos();
-            if (name === 'pomodoro') { loadPomoStatus(); loadPomoFocusOptions(); }
-            if (name === 'checkin') { loadCheckinData(); loadEveningSummary(); }
+            if (name === 'chatlog') { loadChatLogDates(); }
             if (name === 'plugins') { loadPlugins(); }
         }
 
@@ -130,13 +129,11 @@
             // Load todos first since it's the default tab
             loadTodos();
             loadCheckinSettings();
-            loadPomoStatus();
             connectWebSocket();
             if (shouldShowOnboarding()) {
                 setTimeout(openOnboarding, 700);
             }
             setInterval(() => { if (chartsInitialized) loadData(); }, 30000);
-            setInterval(loadPomoStatus, 1000);
         });
 
         // ==================== CHARTS INIT ====================
@@ -1497,6 +1494,144 @@
                     alert(data.error || '激活失败');
                 }
             } catch(e) { alert('网络错误'); }
+        }
+
+        // ==================== CHAT LOG VIEWER ====================
+        var _chatlogDates = [];
+
+        async function loadChatLogDates() {
+            try {
+                const res = await fetch('/api/chatlog/list');
+                const data = await res.json();
+                _chatlogDates = data.dates || [];
+                renderChatLogDateSelect(_chatlogDates);
+                renderChatLogCalendar(_chatlogDates);
+                // Stats
+                document.getElementById('chatlogTotalDays').textContent = _chatlogDates.length;
+                if (_chatlogDates.length) {
+                    document.getElementById('chatlogEarliestDate').textContent = _chatlogDates[_chatlogDates.length - 1];
+                    document.getElementById('chatlogLatestDate').textContent = _chatlogDates[0];
+                } else {
+                    document.getElementById('chatlogEarliestDate').textContent = '--';
+                    document.getElementById('chatlogLatestDate').textContent = '--';
+                }
+                // Auto-select today or latest
+                const sel = document.getElementById('chatlogDateSelect');
+                const today = new Date().toISOString().substring(0, 10);
+                if (_chatlogDates.includes(today)) {
+                    sel.value = today;
+                    loadChatLogContent();
+                } else if (_chatlogDates.length) {
+                    sel.value = _chatlogDates[0];
+                    loadChatLogContent();
+                }
+            } catch(e) {
+                console.error('Load chat log dates failed:', e);
+            }
+        }
+
+        function refreshChatLogDates() { loadChatLogDates(); }
+
+        function renderChatLogDateSelect(dates) {
+            const sel = document.getElementById('chatlogDateSelect');
+            sel.innerHTML = '<option value="">选择日期...</option>' +
+                dates.map(d => `<option value="${d}">${d}</option>`).join('');
+        }
+
+        function renderChatLogCalendar(dates) {
+            const box = document.getElementById('chatlogCalendar');
+            if (!dates.length) {
+                box.innerHTML = '<div style="color:var(--text-muted);padding:8px 0;">暂无对话记录</div>';
+                return;
+            }
+            const dateSet = new Set(dates);
+            // Show last 30 days as a grid
+            const today = new Date();
+            let html = '<div style="display:flex;gap:3px;flex-wrap:wrap;">';
+            for (let i = 29; i >= 0; i--) {
+                const d = new Date(today);
+                d.setDate(d.getDate() - i);
+                const ds = d.toISOString().substring(0, 10);
+                const hasLog = dateSet.has(ds);
+                const isToday = i === 0;
+                const weekday = ['日','一','二','三','四','五','六'][d.getDay()];
+                html += `<div title="${ds} 周${weekday}${hasLog ? '\n有对话记录' : ''}"
+                    style="width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;cursor:${hasLog?'pointer':'default'};
+                    background:${hasLog ? 'var(--green)' : 'var(--bg-card-hover, rgba(128,128,128,0.1))'};
+                    color:${hasLog ? '#fff' : 'var(--text-muted)'};
+                    opacity:${isToday ? '1' : '0.8'};
+                    ${isToday ? 'box-shadow:0 0 0 2px var(--blue);' : ''}"
+                    ${hasLog ? `onclick="document.getElementById('chatlogDateSelect').value='${ds}';loadChatLogContent()"` : ''}>${d.getDate()}</div>`;
+            }
+            html += '</div>';
+            html += '<div style="display:flex;gap:10px;margin-top:8px;font-size:11px;color:var(--text-muted);">';
+            html += '<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--green);"></span> 有记录</span>';
+            html += '<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--bg-card-hover, rgba(128,128,128,0.1));"></span> 无记录</span>';
+            html += '</div>';
+            box.innerHTML = html;
+        }
+
+        async function loadChatLogContent() {
+            const sel = document.getElementById('chatlogDateSelect');
+            const date = sel.value;
+            const box = document.getElementById('chatlogContent');
+            if (!date) {
+                box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">选择日期查看对话记录</div>';
+                return;
+            }
+            box.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">加载中...</div>';
+            try {
+                const res = await fetch(`/api/chatlog/read/${date}`);
+                const data = await res.json();
+                if (data.success && data.content) {
+                    renderChatLogMarkdown(data.content);
+                } else {
+                    box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted);">${data.error || '该日期暂无对话记录'}</div>`;
+                }
+            } catch(e) {
+                box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--red);">加载失败</div>';
+            }
+        }
+
+        function renderChatLogMarkdown(md) {
+            const box = document.getElementById('chatlogContent');
+            // Simple markdown rendering
+            let html = md
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/^# (.+)$/gm, '<h2 style="font-size:18px;font-weight:700;color:var(--text-primary);margin:16px 0 8px;">$1</h2>')
+                .replace(/^## (.+)$/gm, '<h3 style="font-size:15px;font-weight:600;color:var(--text-primary);margin:14px 0 6px;">$1</h3>')
+                .replace(/^### (.+)$/gm, '<h4 style="font-size:13px;font-weight:600;color:var(--blue);margin:12px 0 4px;">$1</h4>')
+                .replace(/^\&gt; (.+)$/gm, '<div style="border-left:3px solid var(--blue);padding:4px 12px;margin:4px 0;background:var(--bg-card-hover, rgba(128,128,128,0.05));font-size:12px;color:var(--text-secondary);">$1</div>')
+                .replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--text-primary);">$1</b>')
+                .replace(/\*(.+?)\*/g, '<em style="color:var(--text-muted);">$1</em>')
+                .replace(/^- \[ \] (.+)$/gm, '<div style="padding:2px 0;">☐ $1</div>')
+                .replace(/^- \[x\] (.+)$/gm, '<div style="padding:2px 0;color:var(--green);">☑ $1</div>')
+                .replace(/^- (.+)$/gm, '<div style="padding:2px 0 2px 8px;">· $1</div>')
+                .replace(/^\|(.+)\|$/gm, function(match) {
+                    const cells = match.split('|').filter(c => c.trim());
+                    if (cells.every(c => /^[\s-]+$/.test(c))) return ''; // skip separator
+                    return '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+                        cells.map(c => `<span style="flex:1;">${c.trim()}</span>`).join('') + '</div>';
+                })
+                .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">')
+                .replace(/\n\n/g, '<br>')
+                .replace(/\n/g, '\n');
+            box.innerHTML = html;
+        }
+
+        async function exportTodayChatLog() {
+            try {
+                const res = await fetch('/api/chat/export', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    alert('已导出: ' + data.message);
+                    loadChatLogDates(); // refresh
+                } else {
+                    alert('导出失败: ' + (data.error || '未知错误'));
+                }
+            } catch(e) {
+                alert('导出失败');
+            }
         }
 
         // ==================== PLUGIN MANAGEMENT ====================
