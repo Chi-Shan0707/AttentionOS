@@ -151,6 +151,17 @@ class DailyBriefing:
             today["dismissed"] = False
             self._set_today(today)
         logger.info(f"今日 briefing 完成，设定 {len(goals)} 个目标")
+
+        # 触发事件
+        try:
+            from attention.core.event_bus import get_event_bus
+            get_event_bus().emit("briefing.completed", {
+                "goals": [g.strip() for g in goals if g.strip()],
+                "goal_count": len(goals),
+            })
+        except Exception:
+            pass
+
         return self.get_briefing_data()
 
     def dismiss_briefing(self) -> Dict[str, Any]:
@@ -165,13 +176,27 @@ class DailyBriefing:
 
     def toggle_goal(self, index: int) -> Dict[str, Any]:
         """切换目标完成状态"""
+        goal_text = ""
+        goal_done = False
         with self._lock:
             today = self._get_today()
             goals = today.get("goals", [])
             if 0 <= index < len(goals):
                 goals[index]["done"] = not goals[index]["done"]
+                goal_text = goals[index].get("text", "")
+                goal_done = goals[index]["done"]
                 today["goals"] = goals
                 self._set_today(today)
+
+        # 触发事件
+        if goal_text:
+            try:
+                from attention.core.event_bus import get_event_bus
+                event_name = "goal.completed" if goal_done else "goal.uncompleted"
+                get_event_bus().emit(event_name, {"text": goal_text, "index": index})
+            except Exception:
+                pass
+
         return self.get_briefing_data()
 
     def add_goal(self, text: str) -> Dict[str, Any]:
@@ -480,6 +505,13 @@ class DailyBriefing:
             today = self._get_today()
             today["evening_review"] = review
             self._set_today(today)
+
+        # 触发事件
+        try:
+            from attention.core.event_bus import get_event_bus
+            get_event_bus().emit("review.generated", {"review": review})
+        except Exception:
+            pass
 
         return review
 

@@ -1189,6 +1189,86 @@ async def list_memos():
     return {"memos": memos[:50]}  # 最多返回 50 条
 
 
+# ==================== 插件管理 API ====================
+
+@app.get("/api/plugins")
+@_safe_route
+async def list_plugins():
+    """获取所有已注册插件的列表"""
+    from attention.core.plugin_manager import get_plugin_manager
+    mgr = get_plugin_manager()
+    return {"plugins": mgr.list_plugins()}
+
+
+@app.post("/api/plugins/{name}/activate")
+@_safe_route
+async def activate_plugin(name: str):
+    """激活指定插件"""
+    from attention.core.plugin_manager import get_plugin_manager
+    mgr = get_plugin_manager()
+    ok = mgr.activate_plugin(name)
+    if ok:
+        return {"success": True, "message": f"插件 {name} 已激活"}
+    return JSONResponse(
+        status_code=400,
+        content={"success": False, "error": f"插件 {name} 激活失败"},
+    )
+
+
+@app.post("/api/plugins/{name}/deactivate")
+@_safe_route
+async def deactivate_plugin(name: str):
+    """停用指定插件"""
+    from attention.core.plugin_manager import get_plugin_manager
+    mgr = get_plugin_manager()
+    ok = mgr.deactivate_plugin(name)
+    if ok:
+        return {"success": True, "message": f"插件 {name} 已停用"}
+    return JSONResponse(
+        status_code=400,
+        content={"success": False, "error": f"插件 {name} 停用失败"},
+    )
+
+
+@app.post("/api/plugins/{name}/config")
+@_safe_route
+async def update_plugin_config(name: str, request: Request):
+    """更新插件配置"""
+    from attention.core.plugin_manager import get_plugin_manager
+    mgr = get_plugin_manager()
+    body = await request.json()
+    config = body.get("config", {})
+    ok = mgr.update_plugin_config(name, config)
+    if ok:
+        return {"success": True, "message": f"插件 {name} 配置已更新"}
+    return JSONResponse(
+        status_code=400,
+        content={"success": False, "error": f"插件 {name} 不存在"},
+    )
+
+
+@app.get("/api/plugins/events")
+@_safe_route
+async def get_event_history():
+    """获取最近的事件历史（调试用）"""
+    from attention.core.event_bus import get_event_bus
+    bus = get_event_bus()
+    return {
+        "history": bus.get_history(50),
+        "listeners": bus.get_listeners(),
+    }
+
+
+@app.post("/api/plugins/discover")
+@_safe_route
+async def discover_plugins():
+    """重新扫描插件目录"""
+    from attention.core.plugin_manager import get_plugin_manager
+    mgr = get_plugin_manager()
+    mgr.discover_plugins()
+    return {"success": True, "plugins": mgr.list_plugins()}
+
+
 # ==================== 静态文件 ====================
 
 static_dir = Config.BASE_DIR / "static"

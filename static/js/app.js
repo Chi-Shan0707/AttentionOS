@@ -77,6 +77,7 @@
             if (name === 'todo') loadTodos();
             if (name === 'pomodoro') { loadPomoStatus(); loadPomoFocusOptions(); }
             if (name === 'checkin') { loadCheckinData(); loadEveningSummary(); }
+            if (name === 'plugins') { loadPlugins(); }
         }
 
         // ==================== INIT ====================
@@ -1459,4 +1460,200 @@
                     alert(data.error || '激活失败');
                 }
             } catch(e) { alert('网络错误'); }
+        }
+
+        // ==================== PLUGIN MANAGEMENT ====================
+
+        const PLUGIN_TYPE_LABELS = {
+            'general': '通用',
+            'analyzer': '分析',
+            'nudge': '提醒',
+            'reporter': '报告',
+            'exporter': '导出',
+            'provider': 'LLM',
+        };
+
+        const PLUGIN_TYPE_COLORS = {
+            'general': 'var(--text-muted)',
+            'analyzer': 'var(--blue)',
+            'nudge': 'var(--amber)',
+            'reporter': 'var(--green)',
+            'exporter': 'var(--purple, #a78bfa)',
+            'provider': 'var(--red, #f87171)',
+        };
+
+        async function loadPlugins() {
+            try {
+                const res = await fetch('/api/plugins');
+                const data = await res.json();
+                renderPluginList(data.plugins || []);
+            } catch (e) {
+                document.getElementById('pluginsList').innerHTML =
+                    '<div class="card" style="text-align:center;color:var(--text-muted);padding:40px;">无法加载插件列表</div>';
+            }
+        }
+
+        function renderPluginList(plugins) {
+            const container = document.getElementById('pluginsList');
+            if (!plugins.length) {
+                container.innerHTML = `
+                    <div class="card" style="text-align:center;padding:40px;">
+                        <div style="font-size:32px;margin-bottom:12px;">🧩</div>
+                        <div style="color:var(--text-secondary);margin-bottom:8px;">暂无插件</div>
+                        <div style="font-size:12px;color:var(--text-muted);line-height:1.8;">
+                            将插件放入 <code>plugins/</code> 目录即可自动发现<br>
+                            复制 <code>plugins/_template/</code> 快速创建新插件
+                        </div>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = plugins.map(p => {
+                const typeLabel = PLUGIN_TYPE_LABELS[p.plugin_type] || p.plugin_type;
+                const typeColor = PLUGIN_TYPE_COLORS[p.plugin_type] || 'var(--text-muted)';
+                const statusDot = p.active
+                    ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;"></span>'
+                    : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-muted);opacity:0.4;margin-right:6px;"></span>';
+                const toggleBtn = p.active
+                    ? `<button class="btn btn-sm" style="color:var(--text-muted);" onclick="togglePlugin('${p.name}', false)">停用</button>`
+                    : `<button class="btn btn-sm btn-green" onclick="togglePlugin('${p.name}', true)">启用</button>`;
+                const errorBadge = p.error
+                    ? `<div style="margin-top:8px;padding:6px 10px;background:rgba(239,68,68,0.1);border-radius:6px;font-size:11px;color:var(--red, #f87171);">⚠️ ${p.error}</div>`
+                    : '';
+                const tags = (p.tags || []).map(t =>
+                    `<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--bg-secondary);color:var(--text-muted);">${t}</span>`
+                ).join(' ');
+
+                const configFields = (p.config_schema || []).map(field => {
+                    const val = (p.config && p.config[field.key]) || '';
+                    if (field.type === 'boolean') {
+                        const checked = val ? 'checked' : '';
+                        return `<div class="setting-group" style="margin-top:6px;">
+                            <label class="setting-label" style="font-size:11px;">${field.label}</label>
+                            <label class="switch"><input type="checkbox" ${checked} data-plugin="${p.name}" data-key="${field.key}" onchange="onPluginConfigChange(this)"><span class="slider"></span></label>
+                        </div>`;
+                    } else if (field.type === 'select') {
+                        const opts = (field.options || []).map(o =>
+                            `<option value="${o}" ${o === val ? 'selected' : ''}>${o}</option>`
+                        ).join('');
+                        return `<div class="setting-group" style="margin-top:6px;">
+                            <label class="setting-label" style="font-size:11px;">${field.label}</label>
+                            <select class="setting-input" style="font-size:11px;" data-plugin="${p.name}" data-key="${field.key}" onchange="onPluginConfigChange(this)">${opts}</select>
+                        </div>`;
+                    } else {
+                        return `<div class="setting-group" style="margin-top:6px;">
+                            <label class="setting-label" style="font-size:11px;">${field.label}</label>
+                            <input type="text" class="setting-input" style="font-size:11px;" value="${val}" data-plugin="${p.name}" data-key="${field.key}" onchange="onPluginConfigChange(this)" placeholder="${field.key}">
+                        </div>`;
+                    }
+                }).join('');
+
+                const configSection = configFields ? `
+                    <details style="margin-top:10px;">
+                        <summary style="font-size:11px;color:var(--text-muted);cursor:pointer;user-select:none;">配置</summary>
+                        <div style="margin-top:6px;">${configFields}</div>
+                    </details>` : '';
+
+                return `
+                    <div class="card" style="padding:14px 16px;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <div style="flex:1;">
+                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                                    ${statusDot}
+                                    <span style="font-weight:600;font-size:14px;color:var(--text-primary);">${p.display_name}</span>
+                                    <span style="font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid ${typeColor};color:${typeColor};">${typeLabel}</span>
+                                    <span style="font-size:11px;color:var(--text-muted);">v${p.version}</span>
+                                </div>
+                                <div style="font-size:12px;color:var(--text-secondary);margin-left:14px;">${p.description}</div>
+                                ${p.author ? `<div style="font-size:11px;color:var(--text-muted);margin-left:14px;margin-top:2px;">by ${p.author}</div>` : ''}
+                                ${tags ? `<div style="margin-left:14px;margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">${tags}</div>` : ''}
+                                ${errorBadge}
+                                ${configSection}
+                            </div>
+                            <div style="margin-left:12px;flex-shrink:0;">
+                                ${toggleBtn}
+                            </div>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        async function togglePlugin(name, activate) {
+            const action = activate ? 'activate' : 'deactivate';
+            try {
+                const res = await fetch(`/api/plugins/${name}/${action}`, { method: 'POST' });
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.error || `${action} 失败`);
+                }
+                loadPlugins();
+            } catch (e) {
+                alert('网络错误');
+            }
+        }
+
+        async function onPluginConfigChange(el) {
+            const pluginName = el.dataset.plugin;
+            const key = el.dataset.key;
+            let value;
+            if (el.type === 'checkbox') {
+                value = el.checked;
+            } else {
+                value = el.value;
+            }
+            try {
+                await fetch(`/api/plugins/${pluginName}/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ config: { [key]: value } }),
+                });
+            } catch (e) {
+                console.warn('保存插件配置失败:', e);
+            }
+        }
+
+        async function discoverPlugins() {
+            try {
+                await fetch('/api/plugins/discover', { method: 'POST' });
+                loadPlugins();
+            } catch (e) {
+                alert('扫描失败');
+            }
+        }
+
+        async function loadEventHistory() {
+            try {
+                const res = await fetch('/api/plugins/events');
+                const data = await res.json();
+                const container = document.getElementById('eventHistoryList');
+                const history = data.history || [];
+                const listeners = data.listeners || [];
+
+                if (!history.length) {
+                    container.innerHTML = '<div style="color:var(--text-muted);">暂无事件记录</div>';
+                    return;
+                }
+
+                let html = history.reverse().map(e =>
+                    `<div style="padding:3px 0;border-bottom:1px solid var(--border-color);">
+                        <span style="color:var(--text-muted);">${e.timestamp}</span>
+                        <span style="color:var(--blue);font-weight:600;">${e.event}</span>
+                        <span style="color:var(--text-muted);">[${(e.data_keys||[]).join(', ')}]</span>
+                    </div>`
+                ).join('');
+
+                if (listeners.length) {
+                    html += `<div style="margin-top:12px;padding-top:8px;border-top:2px solid var(--border-color);">
+                        <div style="font-weight:600;margin-bottom:4px;color:var(--text-secondary);">已注册监听器 (${listeners.length})</div>
+                        ${listeners.map(l =>
+                            `<div style="padding:2px 0;"><span style="color:var(--amber);">${l.event}</span> ← <span style="color:var(--green);">${l.source || 'anonymous'}</span> <span style="color:var(--text-muted);">(priority: ${l.priority})</span></div>`
+                        ).join('')}
+                    </div>`;
+                }
+
+                container.innerHTML = html;
+            } catch (e) {
+                document.getElementById('eventHistoryList').innerHTML =
+                    '<div style="color:var(--red, #f87171);">加载失败</div>';
+            }
         }

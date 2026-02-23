@@ -60,6 +60,13 @@ class Config:
         "show_plan_on_start": True,   # 启动时是否主动告知计划
     }
     
+    # 插件系统配置
+    PLUGINS = {
+        "enabled": True,               # 是否启用插件系统
+        "plugin_dirs": [],             # 额外的插件目录（默认会扫描项目根/plugins）
+        "auto_activate": True,         # 发现插件后是否自动激活（已保存为启用的）
+    }
+
     # 自动启动配置
     AUTO_START = {
         "enabled": False,  # 是否开机自启动
