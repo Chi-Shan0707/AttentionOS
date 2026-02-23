@@ -17,12 +17,13 @@ from attention.core.analyzer import analyze_screen, AnalysisResult
 from attention.core.autostart_manager import AutoStartManager
 from attention.core.database import save_to_database, get_database
 from attention.core.activity_monitor import (
-    get_activity_monitor, 
-    start_activity_monitoring, 
+    get_activity_monitor,
+    start_activity_monitoring,
     stop_activity_monitoring,
     ActivityState
 )
 from attention.core.state_fusion import fuse_state, FusedState
+from attention.core.event_bus import get_event_bus
 from attention.features.recovery_reminder import get_recovery_reminder
 from attention.utils import (
     setup_logging,
@@ -57,7 +58,9 @@ class AttentionAgent:
         self.running = False
         self.activity_monitor = None
         self._active_planner = None  # v5.2
-        
+        self._event_bus = get_event_bus()
+        self._plugin_manager = None
+
         # 初始化
         self.config.ensure_dirs()
     
@@ -93,10 +96,31 @@ class AttentionAgent:
             except Exception as e:
                 logger.warning(f"主动规划引擎启动失败: {e}")
         
+        # 初始化插件系统
+        if self.config.PLUGINS.get("enabled", True):
+            try:
+                from attention.core.plugin_manager import get_plugin_manager
+                self._plugin_manager = get_plugin_manager()
+                extra_dirs = self.config.PLUGINS.get("plugin_dirs", [])
+                self._plugin_manager.discover_plugins(
+                    plugin_dirs=[str(Config.BASE_DIR / "plugins")] + extra_dirs
+                )
+                plugins = self._plugin_manager.list_plugins()
+                active_count = sum(1 for p in plugins if p["active"])
+                logger.info(f"插件系统已启动: {len(plugins)} 个插件已注册, {active_count} 个已激活")
+            except Exception as e:
+                logger.warning(f"插件系统启动失败: {e}")
+
         logger.info("注意力管理Agent已启动")
         logger.info(f"截图分析间隔: {self.config.CHECK_INTERVAL}秒")
         logger.info(f"数据目录: {self.config.DATA_DIR}")
-        
+
+        plugin_info = ""
+        if self._plugin_manager:
+            plugins = self._plugin_manager.list_plugins()
+            active_count = sum(1 for p in plugins if p["active"])
+            plugin_info = f"  插件: {active_count}/{len(plugins)} 个已激活"
+
         print("\n" + "=" * 60)
         print("个人注意力管理Agent v5.2 — 主动引导模式")
         print("=" * 60)
@@ -104,6 +128,8 @@ class AttentionAgent:
         print(f"  活动监控: {'启用' if self.config.ACTIVITY_MONITOR['enabled'] else '禁用'}")
         print(f"  主动规划: {'启用' if self.config.ACTIVE_PLANNER.get('enabled') else '禁用'}")
         print(f"  状态融合: 启用")
+        if plugin_info:
+            print(plugin_info)
         print(f"  按 Ctrl+C 停止监控")
         print("=" * 60 + "\n")
         
@@ -115,12 +141,17 @@ class AttentionAgent:
     def stop(self):
         """停止监控"""
         self.running = False
-        
+
+        # 停用所有插件
+        if self._plugin_manager:
+            self._plugin_manager.deactivate_all()
+            logger.info("插件系统已停止")
+
         # 停止活动监控
         if self.config.ACTIVITY_MONITOR["enabled"]:
             stop_activity_monitoring()
             logger.info("活动监控已停止")
-        
+
         logger.info("正在停止监控...")
         print("\n注意力管理Agent已停止")
     
@@ -145,7 +176,12 @@ class AttentionAgent:
         if image_data is None:
             logger.warning("截图失败，跳过本次分析")
             return
-        
+
+        self._event_bus.emit("monitor.screenshot", {
+            "screenshot_path": str(screenshot_path) if screenshot_path else None,
+            "timestamp": timestamp,
+        })
+
         # 2. 截图分析
         analysis, raw_response = analyze_screen(image_data)
         
@@ -164,7 +200,14 @@ class AttentionAgent:
             activity_state=activity_state,
             idle_duration=idle_duration
         )
-        
+
+        self._event_bus.emit("monitor.analysis", {
+            "analysis": analysis.to_dict() if hasattr(analysis, "to_dict") else {},
+            "fused_state": fused.to_dict() if fused and hasattr(fused, "to_dict") else {},
+            "activity_state": activity_state.to_dict() if activity_state and hasattr(activity_state, "to_dict") else {},
+            "timestamp": timestamp,
+        })
+
         # 5. 保存记录
         record = save_to_database(
             analysis=analysis,
@@ -176,7 +219,16 @@ class AttentionAgent:
         
         # 6. 显示结果
         self._display_result(analysis, activity_state, fused)
-        
+
+        # 6.5 触发核心事件：监控周期完成
+        if fused:
+            self._event_bus.emit("monitor.cycle_complete", {
+                "fused_state": fused.to_dict() if hasattr(fused, "to_dict") else {},
+                "activity_state": activity_state.to_dict() if activity_state and hasattr(activity_state, "to_dict") else {},
+                "analysis": analysis.to_dict() if hasattr(analysis, "to_dict") else {},
+                "timestamp": timestamp,
+            })
+
         # 7. 更新恢复提醒器状态 + 对话悬浮窗上下文
         if fused:
             recovery_reminder = get_recovery_reminder()
@@ -271,7 +323,15 @@ class AttentionAgent:
     def _handle_intervention(self, fused: FusedState):
         """处理介入提醒 → 通过对话悬浮窗发起对话"""
         logger.info(f"触发介入提醒: {fused.intervention_reason}")
-        
+
+        # 触发 nudge 事件，让插件也能响应
+        self._event_bus.emit("nudge.triggered", {
+            "message": fused.intervention_reason,
+            "priority": "high",
+            "source": "intervention",
+            "context": fused.to_dict() if hasattr(fused, "to_dict") else {},
+        })
+
         try:
             from attention.ui.chat_overlay import get_chat_overlay
             overlay = get_chat_overlay()
@@ -290,6 +350,15 @@ class AttentionAgent:
             nudge_msg = briefing.check_off_track(fused.to_dict())
             if nudge_msg:
                 logger.info(f"任务感知提醒: {nudge_msg}")
+
+                # 触发 nudge 事件
+                self._event_bus.emit("nudge.triggered", {
+                    "message": nudge_msg,
+                    "priority": "normal",
+                    "source": "goal_deviation",
+                    "context": fused.to_dict() if hasattr(fused, "to_dict") else {},
+                })
+
                 try:
                     from attention.ui.chat_overlay import get_chat_overlay
                     overlay = get_chat_overlay()

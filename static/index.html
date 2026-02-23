@@ -100,6 +100,7 @@
             <button class="nav-tab" onclick="switchTab('checkin', this)">⏰ 签到</button>
             <button class="nav-tab" onclick="switchTab('pomodoro', this)">🍅 番茄钟</button>
             <button class="nav-tab active" onclick="switchTab('todo', this)">📋 任务</button>
+            <button class="nav-tab" onclick="switchTab('plugins', this)">🧩 插件</button>
             <button class="nav-tab" onclick="switchTab('settings', this)">⚙️ 设置</button>
         </div>
 
@@ -372,6 +373,40 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- ==================== TAB: SETTINGS ==================== -->
+        <!-- ==================== TAB: PLUGINS ==================== -->
+        <div class="tab-content" id="tab-plugins">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <div>
+                    <div style="font-size:16px;font-weight:700;color:var(--text-primary);">插件管理</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">安装、启用和配置插件来扩展 Attention OS 功能</div>
+                </div>
+                <button class="btn btn-sm btn-blue" onclick="discoverPlugins()">🔄 重新扫描</button>
+            </div>
+
+            <div id="pluginsList" style="display:grid;gap:12px;">
+                <div class="card" style="text-align:center;color:var(--text-muted);padding:40px;">
+                    加载中...
+                </div>
+            </div>
+
+            <!-- Event History (debug) -->
+            <details style="margin-top:24px;">
+                <summary style="font-size:13px;color:var(--text-muted);cursor:pointer;user-select:none;">
+                    🔧 事件总线调试
+                </summary>
+                <div class="card" style="margin-top:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <div class="card-title" style="margin:0;">最近事件</div>
+                        <button class="btn btn-sm" onclick="loadEventHistory()">刷新</button>
+                    </div>
+                    <div id="eventHistoryList" style="font-size:12px;font-family:'JetBrains Mono',monospace;max-height:300px;overflow-y:auto;">
+                        <div style="color:var(--text-muted);">点击刷新查看事件</div>
+                    </div>
+                </div>
+            </details>
         </div>
 
         <!-- ==================== TAB: SETTINGS ==================== -->
