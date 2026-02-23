@@ -50,6 +50,13 @@ class Config:
         "style": "encouraging",       # 提醒风格: encouraging/neutral/strict
     }
     
+    # 持久离开跳过配置
+    AWAY_SKIP = {
+        "enabled": True,          # 是否启用：检测到用户持久离开时跳过截图和LLM分析
+        "idle_threshold": 300,    # 空闲超过N秒判定为持久离开（默认5分钟）
+        "log_interval": 300,      # 每隔N秒在控制台输出一次"已跳过"提示（避免刷屏）
+    }
+
     # 主动规划配置 (v5.2)
     ACTIVE_PLANNER = {
         "enabled": True,              # 是否启用主动规划引擎

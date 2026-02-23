@@ -60,6 +60,7 @@ class AttentionAgent:
         self._active_planner = None  # v5.2
         self._event_bus = get_event_bus()
         self._plugin_manager = None
+        self._last_away_log: float = 0.0  # 上次输出"离开"提示的时间戳
 
         # 初始化
         self.config.ensure_dirs()
@@ -170,7 +171,18 @@ class AttentionAgent:
         """单次监控周期"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         logger.debug(f"开始监控周期: {timestamp}")
-        
+
+        # 0. 持久离开检测：若用户已长时间无活动，跳过截图和LLM分析以节省资源
+        if (
+            self.activity_monitor
+            and self.config.AWAY_SKIP.get("enabled", True)
+        ):
+            idle_seconds = self.activity_monitor.get_idle_duration()
+            away_threshold = self.config.AWAY_SKIP.get("idle_threshold", 300)
+            if idle_seconds >= away_threshold:
+                self._log_away_status(idle_seconds)
+                return
+
         # 1. 截图
         image_data, screenshot_path = capture_screen()
         if image_data is None:
@@ -277,9 +289,23 @@ class AttentionAgent:
         if fused:
             self._check_goal_deviation(fused)
     
+    def _log_away_status(self, idle_seconds: int):
+        """
+        周期性地在控制台提示用户离开状态，避免每个周期都刷屏。
+        受 AWAY_SKIP.log_interval 控制（默认每5分钟输出一次）。
+        """
+        now = time.time()
+        log_interval = self.config.AWAY_SKIP.get("log_interval", 300)
+        if now - self._last_away_log >= log_interval:
+            time_str = datetime.now().strftime('%H:%M:%S')
+            minutes = idle_seconds // 60
+            print(f"\n[{time_str}] 💤 用户已离开 {minutes} 分钟，暂停截图和LLM分析（节省资源）...")
+            logger.info(f"用户已持续空闲 {idle_seconds}s，跳过本次截图和LLM分析")
+            self._last_away_log = now
+
     def _display_result(
-        self, 
-        analysis: AnalysisResult, 
+        self,
+        analysis: AnalysisResult,
         activity_state: Optional[ActivityState],
         fused: Optional[FusedState]
     ):
