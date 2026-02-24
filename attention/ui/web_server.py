@@ -1130,6 +1130,39 @@ async def set_provider_key(provider: str, request: Request):
     }
 
 
+
+
+@app.post("/api/settings/providers/{provider}/config")
+@_safe_route
+async def update_provider_config(provider: str, request: Request):
+    """更新指定提供商配置（模型/API Base）"""
+    from attention.core.api_settings import get_api_settings
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    text_model = (body.get("text_model") or "").strip()
+    vision_model = (body.get("vision_model") or "").strip()
+    api_base = (body.get("api_base") or "").strip()
+
+    updates = {}
+    if text_model:
+        updates["text_model"] = text_model
+    # 允许清空视觉模型
+    if "vision_model" in body:
+        updates["vision_model"] = vision_model
+    if api_base:
+        updates["api_base"] = api_base
+
+    if not updates:
+        return {"success": False, "error": "没有可更新的配置"}
+
+    mgr = get_api_settings()
+    ok = mgr.update_provider_config(provider, **updates)
+    if not ok:
+        return {"success": False, "error": "提供商不存在或更新失败"}
+    return {"success": True, "message": f"{provider} 配置已更新"}
 @app.post("/api/settings/providers/{provider}/test")
 @_safe_route
 async def test_provider_key(provider: str, request: Request):
