@@ -100,10 +100,10 @@
                 <div class="onboarding-step">
                     <div class="step-num">2</div>
                     <div>
-                        <div class="step-title">开启番茄钟节奏</div>
-                        <div class="step-desc">进入「番茄钟」，设定一个本次专注任务，点击开始并让系统提醒你休息。</div>
+                        <div class="step-title">开启番茄钟专注</div>
+                        <div class="step-desc">点击右下角对话按钮，选择「专注模式」，设定专注任务并让系统提醒你休息。</div>
                     </div>
-                    <button class="btn btn-amber btn-sm" onclick="jumpToTab('pomodoro')">去启动</button>
+                    <button class="btn btn-amber btn-sm" onclick="toggleChat(); setChatMode('focus')">去启动</button>
                 </div>
                 <div class="onboarding-step">
                     <div class="step-num">3</div>
@@ -140,10 +140,9 @@
 
         <!-- Nav Tabs -->
         <div class="nav-tabs">
-            <button class="nav-tab" onclick="switchTab('dashboard', this)">📊 仪表盘</button>
-            <button class="nav-tab" onclick="switchTab('checkin', this)">⏰ 签到</button>
-            <button class="nav-tab" onclick="switchTab('pomodoro', this)">🍅 番茄钟</button>
             <button class="nav-tab active" onclick="switchTab('todo', this)">📋 任务</button>
+            <button class="nav-tab" onclick="switchTab('dashboard', this)">📊 仪表盘</button>
+            <button class="nav-tab" onclick="switchTab('chatlog', this)">💬 对话记录</button>
             <button class="nav-tab" onclick="switchTab('plugins', this)">🧩 插件</button>
             <button class="nav-tab" onclick="switchTab('settings', this)">⚙️ 设置</button>
         </div>
@@ -250,119 +249,12 @@
             </div>
         </div>
 
-        <!-- ==================== TAB: CHECKIN ==================== -->
-        <div class="tab-content" id="tab-checkin">
-            <div class="g2e">
-                <!-- 左侧：签到输入 + 今日时间线 -->
-                <div class="card">
-                    <div class="card-title">⏰ 快速签到</div>
-                    <div style="display:flex;gap:8px;margin-bottom:12px;">
-                        <input type="text" class="todo-input" id="checkinInput" placeholder="过去一小时你在做什么？" onkeydown="if(event.key==='Enter')submitWebCheckin()" style="flex:1;">
-                        <select id="checkinFeeling" class="setting-input" style="width:auto;min-width:100px;">
-                            <option value="great">🔥 极佳</option>
-                            <option value="good">😊 不错</option>
-                            <option value="normal" selected>😐 一般</option>
-                            <option value="tired">😴 有点累</option>
-                            <option value="bad">😫 很差</option>
-                        </select>
-                        <button class="btn btn-green btn-sm" onclick="submitWebCheckin()">签到</button>
-                    </div>
-                    <div class="card-title" style="margin-top:16px;">今日签到时间线</div>
-                    <div id="checkinTimeline" style="max-height:420px;overflow-y:auto;"></div>
-                    <div style="margin-top:12px;display:flex;gap:8px;">
-                        <button class="btn btn-sm btn-blue" onclick="triggerCheckinPopup()">📢 弹窗签到</button>
-                        <button class="btn btn-sm btn-amber" onclick="generateSummaryNow()">🌙 生成晚间总结</button>
-                        <button class="btn btn-sm btn-green" onclick="openEveningReview()">📊 一日回顾</button>
-                    </div>
-                </div>
-                <!-- 右侧：统计 + 晚间总结 -->
-                <div class="card">
-                    <div class="card-title">📊 签到统计</div>
-                    <div class="status-row"><span class="sr-label">今日签到</span><span class="sr-value" id="checkinCount">0</span></div>
-                    <div class="status-row"><span class="sr-label">跳过次数</span><span class="sr-value" id="checkinSkipped">0</span></div>
-                    <div class="status-row"><span class="sr-label">下次签到</span><span class="sr-value" id="checkinNext">--</span></div>
-                    <div class="status-row"><span class="sr-label">签到状态</span><span class="sr-value" id="checkinRunning">--</span></div>
-
-                    <div class="card-title" style="margin-top:20px;">🌙 晚间总结</div>
-                    <div id="eveningSummaryBox" style="font-size:13px;color:var(--text-secondary);line-height:1.8;">
-                        <span style="color:var(--text-muted);">暂无总结，到达设定时间后自动生成</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ==================== TAB: POMODORO ==================== -->
-        <div class="tab-content" id="tab-pomodoro">
-            <div class="g2e">
-                <div class="card" style="display:flex;flex-direction:column;align-items:center;">
-                    <div class="card-title" style="align-self:flex-start;">番茄钟</div>
-                    <!-- Focus Task Selector -->
-                    <div id="pomoFocusArea" style="align-self:stretch;margin-bottom:12px;">
-                        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">🎯 本次专注任务</div>
-                        <select id="pomoFocusSelect" class="setting-input" style="width:100%;font-size:13px;font-family:var(--sans);">
-                            <option value="">（无绑定，自由专注）</option>
-                        </select>
-                        <div id="pomoCurrentFocus" style="display:none;text-align:center;padding:8px 12px;margin-top:8px;background:var(--green-dim);border-radius:var(--radius-sm);font-size:13px;color:var(--green);font-weight:500;"></div>
-                    </div>
-                    <div class="pomo-ring-container">
-                        <div class="pomo-ring">
-                            <svg viewBox="0 0 200 200">
-                                <circle class="bg" cx="100" cy="100" r="88"/>
-                                <circle class="fg" id="pomoRing" cx="100" cy="100" r="88"
-                                    stroke="var(--green)" stroke-dasharray="553" stroke-dashoffset="0"/>
-                            </svg>
-                            <div class="pomo-center">
-                                <div class="pomo-time" id="pomoTime">25:00</div>
-                                <div class="pomo-label" id="pomoLabel">空闲</div>
-                            </div>
-                        </div>
-                        <div class="pomo-cycles" id="pomoCycles"></div>
-                        <div class="pomo-btns" id="pomoBtns">
-                            <button class="btn btn-green" onclick="pomoStartWithTask()">▶ 开始专注</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-title">今日统计</div>
-                    <div class="status-row"><span class="sr-label">完成番茄</span><span class="sr-value" id="pomoCompleted">0</span></div>
-                    <div class="status-row"><span class="sr-label">累计专注</span><span class="sr-value" id="pomoWorkMin">0 分钟</span></div>
-                    <div class="status-row"><span class="sr-label">累计休息</span><span class="sr-value" id="pomoBreakMin">0 分钟</span></div>
-                    <div class="status-row"><span class="sr-label">跳过休息</span><span class="sr-value" id="pomoSkipped">0 次</span></div>
-
-                    <!-- Focus Session Log -->
-                    <div class="card-title" style="margin-top:16px;">📋 专注记录</div>
-                    <div id="pomoSessionLog" style="max-height:180px;overflow-y:auto;">
-                        <div style="font-size:12px;color:var(--text-muted);padding:4px 0;">今日尚无专注记录</div>
-                    </div>
-
-                    <div style="margin-top:16px;">
-                        <div class="card-title">番茄钟设置</div>
-                        <div class="setting-group" style="margin-bottom:10px;">
-                            <label class="setting-label">工作时长（分钟）</label>
-                            <input type="number" class="setting-input" id="pomoWorkMins" value="25" min="5" max="60" onchange="updatePomoSettings()">
-                        </div>
-                        <div class="setting-group" style="margin-bottom:10px;">
-                            <label class="setting-label">短休息（分钟）</label>
-                            <input type="number" class="setting-input" id="pomoShortBreak" value="5" min="1" max="15" onchange="updatePomoSettings()">
-                        </div>
-                        <div class="setting-group" style="margin-bottom:10px;">
-                            <label class="setting-label">长休息（分钟）</label>
-                            <input type="number" class="setting-input" id="pomoLongBreak" value="15" min="5" max="30" onchange="updatePomoSettings()">
-                        </div>
-                        <div class="setting-group">
-                            <label class="setting-label">强制休息（屏幕模糊）</label>
-                            <label class="switch"><input type="checkbox" id="pomoForceBreak" checked onchange="updatePomoSettings()"><span class="slider"></span></label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- ==================== TAB: TODO ==================== -->
         <div class="tab-content active" id="tab-todo">
             <div class="quickstart-banner">
                 <div>
-                    <div class="quickstart-title">✨ 今天先做这三件事：写任务 → 开番茄钟 → 查看仪表盘</div>
+                    <div class="quickstart-title">✨ 今天先做这三件事：写任务 → 查看仪表盘 → 开始专注</div>
                     <div class="quickstart-sub">如果你是第一次使用，建议先运行引导，3 分钟即可完成基础配置。</div>
                 </div>
                 <div class="quickstart-actions">
@@ -424,6 +316,39 @@
                             系统自动提取 <b>标题、截止日期、优先级、标签</b>。<br>
                             也支持 🎙 语音输入（Chrome/Edge）。
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB: CHAT LOG ==================== -->
+        <div class="tab-content" id="tab-chatlog">
+            <div class="g2e">
+                <div class="card">
+                    <div class="card-title">💬 对话记录</div>
+                    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+                        <select id="chatlogDateSelect" class="setting-input" style="flex:1;" onchange="loadChatLogContent()">
+                            <option value="">选择日期...</option>
+                        </select>
+                        <button class="btn btn-sm btn-blue" onclick="refreshChatLogDates()">🔄 刷新</button>
+                    </div>
+                    <div id="chatlogContent" style="max-height:600px;overflow-y:auto;line-height:1.8;font-size:13px;color:var(--text-secondary);">
+                        <div style="text-align:center;padding:40px;color:var(--text-muted);">
+                            选择日期查看对话记录
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">📅 记录日历</div>
+                    <div id="chatlogCalendar" style="font-size:13px;color:var(--text-secondary);">
+                        <div style="color:var(--text-muted);">加载中...</div>
+                    </div>
+                    <div class="card-title" style="margin-top:20px;">📊 统计</div>
+                    <div class="status-row"><span class="sr-label">总记录天数</span><span class="sr-value" id="chatlogTotalDays">0</span></div>
+                    <div class="status-row"><span class="sr-label">最早记录</span><span class="sr-value" id="chatlogEarliestDate">--</span></div>
+                    <div class="status-row"><span class="sr-label">最近记录</span><span class="sr-value" id="chatlogLatestDate">--</span></div>
+                    <div style="margin-top:16px;">
+                        <button class="btn btn-sm btn-green" onclick="exportTodayChatLog()">📤 导出今日对话</button>
                     </div>
                 </div>
             </div>
