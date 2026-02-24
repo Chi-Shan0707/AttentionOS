@@ -107,6 +107,14 @@ class APISettingsManager:
         client = get_llm_provider()
         return client.test_api_key(provider, api_key)
 
+    def update_provider_config(self, provider: str, **kwargs) -> bool:
+        """更新提供商配置并持久化"""
+        client = get_llm_provider()
+        ok = client.update_provider_config(provider, **kwargs)
+        if ok:
+            self.save()
+        return ok
+
     def get_all_configs(self):
         """获取所有提供商配置（前端安全）"""
         client = get_llm_provider()
@@ -115,6 +123,7 @@ class APISettingsManager:
         active = client.get_active_provider()
         for c in configs:
             c["is_active"] = c["provider"] == active
+            c["model_suggestions"] = client.get_suggested_models(c["provider"])
         return configs
 
 

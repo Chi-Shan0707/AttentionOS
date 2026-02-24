@@ -1412,24 +1412,73 @@
             box.innerHTML = providers.map(p => {
                 const isActive = p.is_active;
                 const hasKey = p.api_key_set;
+                const suggested = p.model_suggestions || {text: [], vision: []};
+                const textOpts = (suggested.text || []).map(m => `<option value="${m}" ${m === p.text_model ? 'selected' : ''}>${m}</option>`).join('');
+                const visionOpts = (suggested.vision || []).map(m => `<option value="${m}" ${m === p.vision_model ? 'selected' : ''}>${m}</option>`).join('');
+
                 return `<div class="api-provider-card ${isActive ? 'active' : ''}" id="provider-${p.provider}">
                     <div class="api-provider-header">
                         <span class="api-provider-name">${p.display_name || p.provider}</span>
                         <span class="api-provider-badge badge ${isActive ? 'badge-green' : hasKey ? 'badge-blue' : 'badge-amber'}">${isActive ? '当前使用' : hasKey ? '已配置' : '未配置'}</span>
                     </div>
-                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">
-                        模型: ${p.text_model} ${p.vision_model ? '| 视觉: ' + p.vision_model : ''}
+                    <div class="api-model-grid">
+                        <div class="api-model-field">
+                            <label>文本模型</label>
+                            <input class="api-model-input" list="text-models-${p.provider}" id="textmodel-${p.provider}" value="${p.text_model || ''}" placeholder="输入或选择文本模型">
+                            <datalist id="text-models-${p.provider}">${textOpts}</datalist>
+                        </div>
+                        <div class="api-model-field">
+                            <label>视觉模型</label>
+                            <input class="api-model-input" list="vision-models-${p.provider}" id="visionmodel-${p.provider}" value="${p.vision_model || ''}" placeholder="可为空（该提供商无视觉模型）">
+                            <datalist id="vision-models-${p.provider}">${visionOpts}</datalist>
+                        </div>
                     </div>
                     <div class="api-key-row">
                         <input type="password" class="api-key-input" id="apikey-${p.provider}"
                             placeholder="${hasKey ? '••••••••（已配置，输入新值覆盖）' : '输入 API Key...'}"
                             autocomplete="off">
+                        <button class="api-save-btn" onclick="saveProviderConfig('${p.provider}')">保存模型</button>
                         <button class="api-test-btn" onclick="testAPIKey('${p.provider}')">测试</button>
                         ${!isActive && hasKey ? `<button class="api-activate-btn" onclick="activateProvider('${p.provider}')">激活</button>` : ''}
                     </div>
                     <div class="api-test-result" id="testResult-${p.provider}"></div>
                 </div>`;
             }).join('');
+        }
+
+        async function saveProviderConfig(provider) {
+            const textModel = (document.getElementById('textmodel-' + provider)?.value || '').trim();
+            const visionModel = (document.getElementById('visionmodel-' + provider)?.value || '').trim();
+            const resultEl = document.getElementById('testResult-' + provider);
+            resultEl.className = 'api-test-result';
+            resultEl.style.display = 'none';
+
+            if (!textModel) {
+                resultEl.className = 'api-test-result fail';
+                resultEl.textContent = '❌ 文本模型不能为空';
+                return false;
+            }
+
+            try {
+                const res = await fetch(`/api/settings/providers/${provider}/config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({text_model: textModel, vision_model: visionModel})
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    resultEl.className = 'api-test-result fail';
+                    resultEl.textContent = '❌ ' + (data.error || '模型保存失败');
+                    return false;
+                }
+                resultEl.className = 'api-test-result success';
+                resultEl.textContent = '✅ ' + (data.message || '模型配置已保存');
+                return true;
+            } catch(e) {
+                resultEl.className = 'api-test-result fail';
+                resultEl.textContent = '❌ 保存失败: ' + e.message;
+                return false;
+            }
         }
 
         async function testAPIKey(provider) {
@@ -1444,6 +1493,11 @@
             resultEl.style.display = 'none';
 
             try {
+                const modelSaved = await saveProviderConfig(provider);
+                if (!modelSaved) {
+                    throw new Error('请先修正模型配置后再测试');
+                }
+
                 // If new key entered, save it first and give explicit feedback
                 if (apiKey) {
                     const saveRes = await fetch(`/api/settings/providers/${provider}/key`, {

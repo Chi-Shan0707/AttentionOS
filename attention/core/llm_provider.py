@@ -99,6 +99,38 @@ DEFAULT_CONFIGS: Dict[str, ProviderConfig] = {
 }
 
 
+# 常见可选模型（用于前端下拉/建议；用户也可输入自定义模型）
+SUGGESTED_MODELS: Dict[str, Dict[str, List[str]]] = {
+    LLMProvider.MODELSCOPE: {
+        "text": [
+            "Qwen/Qwen2.5-72B-Instruct",
+            "Qwen/Qwen2.5-32B-Instruct",
+            "Qwen/Qwen2.5-14B-Instruct",
+        ],
+        "vision": [
+            "Qwen/Qwen3-VL-235B-A22B-Instruct",
+            "Qwen/Qwen2.5-VL-72B-Instruct",
+        ],
+    },
+    LLMProvider.DASHSCOPE: {
+        "text": ["qwen-plus", "qwen-turbo", "qwen-max"],
+        "vision": ["qwen-vl-plus", "qwen-vl-max"],
+    },
+    LLMProvider.DEEPSEEK: {
+        "text": ["deepseek-chat", "deepseek-reasoner"],
+        "vision": [],
+    },
+    LLMProvider.OPENAI: {
+        "text": ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1"],
+        "vision": ["gpt-4o", "gpt-4.1"],
+    },
+    LLMProvider.CLAUDE: {
+        "text": ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022"],
+        "vision": ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022"],
+    },
+}
+
+
 # ================================================================== #
 #  统一客户端
 # ================================================================== #
@@ -164,6 +196,10 @@ class MultiLLMClient:
             if hasattr(cfg, key) and key != "provider":
                 setattr(cfg, key, val)
         return True
+
+    def get_suggested_models(self, provider: str) -> Dict[str, List[str]]:
+        """获取提供商常见模型建议列表"""
+        return SUGGESTED_MODELS.get(provider, {"text": [], "vision": []})
 
     # ---------------------------------------------------------------- #
     #  内部 — 提供商回退链
