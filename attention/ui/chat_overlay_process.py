@@ -245,6 +245,57 @@ def run_tkinter():
                         fg=GREEN, bg=BG_INPUT, cursor="hand2", padx=6, pady=2)
     send_btn.place(relx=1.0, rely=0.5, anchor="e", x=-14)
 
+    # ─── 专注控制栏（暂停/继续/停止/跳过休息）───
+    focus_bar = tk.Frame(chat_frame, bg=BG_DARK, height=36)
+    # 不立即 pack，按需显示
+    focus_bar.pack_propagate(False)
+    focus_bar_widgets = []  # 存放动态按钮引用
+
+    def _make_focus_btn(parent, text, fg_color, action_name):
+        """创建专注控制按钮"""
+        btn = tk.Label(
+            parent, text=text,
+            font=(FONT_FAMILY, 11, "bold"),
+            fg=fg_color, bg="#1c1c2e",
+            cursor="hand2", padx=12, pady=4,
+        )
+        btn.bind("<Button-1>", lambda e: emit({"type": "action", "action": action_name}))
+        # hover 效果
+        btn.bind("<Enter>", lambda e: btn.config(bg="#2a2a3e"))
+        btn.bind("<Leave>", lambda e: btn.config(bg="#1c1c2e"))
+        return btn
+
+    def update_focus_bar():
+        """根据当前 phase 更新专注控制栏的按钮"""
+        phase = state["phase"]
+        # 清除旧按钮
+        for w in focus_bar_widgets:
+            w.destroy()
+        focus_bar_widgets.clear()
+        focus_bar.pack_forget()
+
+        if phase == "working":
+            b1 = _make_focus_btn(focus_bar, "⏸ 暂停", AMBER, "pause")
+            b1.pack(side="left", padx=(12, 4), pady=4)
+            focus_bar_widgets.append(b1)
+            b2 = _make_focus_btn(focus_bar, "⏹ 停止", RED, "stop")
+            b2.pack(side="left", padx=4, pady=4)
+            focus_bar_widgets.append(b2)
+            focus_bar.pack(fill="x", side="bottom", before=mode_frame)
+        elif phase == "paused":
+            b1 = _make_focus_btn(focus_bar, "▶ 继续", GREEN, "resume")
+            b1.pack(side="left", padx=(12, 4), pady=4)
+            focus_bar_widgets.append(b1)
+            b2 = _make_focus_btn(focus_bar, "⏹ 停止", RED, "stop")
+            b2.pack(side="left", padx=4, pady=4)
+            focus_bar_widgets.append(b2)
+            focus_bar.pack(fill="x", side="bottom", before=mode_frame)
+        elif phase in ("short_break", "long_break"):
+            b1 = _make_focus_btn(focus_bar, "⏩ 跳过休息", BLUE, "skip_break")
+            b1.pack(side="left", padx=(12, 4), pady=4)
+            focus_bar_widgets.append(b1)
+            focus_bar.pack(fill="x", side="bottom", before=mode_frame)
+
     # ─── 模式标签栏（随手记 / 问 AI / 专注模式）───
     mode_frame = tk.Frame(chat_frame, bg=BG_DARK, height=32)
     mode_frame.pack(fill="x", side="bottom")
@@ -373,6 +424,7 @@ def run_tkinter():
         root.geometry(f"{CHAT_W}x{CHAT_H}+{new_x}+{new_y}")
         chat_frame.pack(fill="both", expand=True)
         render_messages()
+        update_focus_bar()
         input_entry.focus_set()
         emit({"type": "expand"})
 
@@ -572,11 +624,15 @@ def run_tkinter():
                     expand()
 
             elif act == "update_timer":
+                old_phase = state["phase"]
                 state["time_text"] = cmd.get("time", "")
                 state["phase"] = cmd.get("phase", "idle")
                 state["progress"] = cmd.get("progress", 0.0)
                 if state["expanded"]:
                     update_header()
+                    # 当 phase 变化时更新控制栏按钮
+                    if state["phase"] != old_phase:
+                        update_focus_bar()
 
             elif act == "expand":
                 expand()
