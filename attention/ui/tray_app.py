@@ -185,11 +185,36 @@ class AppManager:
 
     # ---------- 启动后台服务（可以从任何线程调用） ----------
 
+    def _setup_autostart_on_first_launch(self):
+        """首次启动时自动设置开机自启（后台静默执行）"""
+        try:
+            from attention.core.app_settings import get_app_settings
+            from attention.core.autostart_manager import AutoStartManager
+
+            settings = get_app_settings()
+            if not settings.has_launched:
+                logger.info("首次启动，正在自动设置开机自启...")
+                mgr = AutoStartManager()
+                success = mgr.enable()
+                settings.auto_start_enabled = success
+                settings.mark_launched()
+                if success:
+                    logger.info("开机自启已自动配置")
+                else:
+                    logger.warning("开机自启自动配置失败（可在设置中手动开启）")
+            else:
+                settings.mark_launched()
+        except Exception as e:
+            logger.warning(f"首次启动自启动设置异常: {e}")
+
     def _start_background_services(self):
         """在后台线程中启动 Web、Agent、Break、Checkin、Overlay 等服务"""
         import time
         from attention.ui.web_server import run_server
         from attention.main import AttentionAgent
+
+        # 首次启动自动配置开机自启（后台）
+        threading.Thread(target=self._setup_autostart_on_first_launch, daemon=True).start()
 
         # Web 服务器
         web_thread = threading.Thread(

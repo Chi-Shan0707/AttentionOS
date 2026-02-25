@@ -1397,6 +1397,47 @@
             }
         }
 
+        // ==================== 开机自启 ====================
+        async function loadAutoStartStatus() {
+            try {
+                const res = await fetch('/api/settings/autostart');
+                const data = await res.json();
+                const toggle = document.getElementById('autoStartToggle');
+                const statusEl = document.getElementById('autoStartStatus');
+                if (toggle) toggle.checked = !!data.enabled;
+                if (statusEl) {
+                    const platform = data.platform || '';
+                    const hint = platform === 'Darwin' ? '（macOS LaunchAgent）'
+                               : platform === 'Windows' ? '（Windows 启动项）'
+                               : platform === 'Linux' ? '（systemd 用户服务）' : '';
+                    statusEl.textContent = data.enabled
+                        ? `已启用 ${hint} — 下次登录后将自动在后台启动`
+                        : `未启用 — 开启后登录系统时自动在后台运行 ${hint}`;
+                }
+            } catch(e) {
+                console.error('loadAutoStartStatus failed:', e);
+            }
+        }
+
+        async function toggleAutoStart(enabled) {
+            const statusEl = document.getElementById('autoStartStatus');
+            if (statusEl) statusEl.textContent = '正在' + (enabled ? '启用' : '禁用') + '…';
+            try {
+                const res = await fetch('/api/settings/autostart', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({enabled})
+                });
+                const data = await res.json();
+                if (statusEl) statusEl.textContent = data.message || (data.success ? '操作成功' : '操作失败');
+                // 重新拉取最新状态同步 toggle
+                setTimeout(loadAutoStartStatus, 500);
+            } catch(e) {
+                if (statusEl) statusEl.textContent = '请求失败，请重试';
+                console.error('toggleAutoStart failed:', e);
+            }
+        }
+
         // ==================== API SETTINGS ====================
         async function loadAPIProviders() {
             try {
