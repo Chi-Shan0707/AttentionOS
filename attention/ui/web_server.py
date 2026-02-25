@@ -1197,6 +1197,58 @@ async def set_active_provider(request: Request):
     return {"success": True, "active_provider": provider}
 
 
+# ==================== 开机自启 API ====================
+
+@app.get("/api/settings/autostart")
+@_safe_route
+async def get_autostart_status():
+    """获取开机自启状态"""
+    import platform
+    from attention.core.autostart_manager import AutoStartManager
+    from attention.core.app_settings import get_app_settings
+
+    mgr = AutoStartManager()
+    os_enabled = mgr.is_enabled()
+    user_pref = get_app_settings().auto_start_enabled
+
+    return {
+        "enabled": os_enabled,
+        "user_preference": user_pref,
+        "platform": platform.system(),
+    }
+
+
+@app.post("/api/settings/autostart")
+@_safe_route
+async def set_autostart(request: Request):
+    """启用或禁用开机自启"""
+    from attention.core.autostart_manager import AutoStartManager
+    from attention.core.app_settings import get_app_settings
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    enabled = bool(body.get("enabled", False))
+    mgr = AutoStartManager()
+
+    if enabled:
+        success = mgr.enable()
+    else:
+        success = mgr.disable()
+
+    # 持久化用户偏好
+    settings = get_app_settings()
+    settings.auto_start_enabled = enabled
+
+    return {
+        "success": success,
+        "enabled": enabled,
+        "message": f"开机自启已{'启用' if enabled else '禁用'}" if success else "操作失败，请检查权限",
+    }
+
+
 # ==================== 随手记 API ====================
 
 @app.post("/api/memo/save")
